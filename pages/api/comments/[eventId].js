@@ -1,7 +1,23 @@
-function handler (req, res) {
+import { 
+   connectDatabase, 
+   insertDocument, 
+   getAllDocuments,
+} from "../../../helpers/db-utils";
+
+async function handler (req, res) {
    const eventId = req.query.eventId;
-   
-   if (req.body.method === 'POST') {
+
+  let client;
+
+   try {
+      client = await connectDatabase();
+   } 
+   catch (error) {
+      res.status(500).json({ message: 'Connecting to the database failed!'});
+      return;
+   }
+
+   if (req.method === 'POST') {
         const {email, name, text } = req.body;
 
         if (
@@ -12,37 +28,47 @@ function handler (req, res) {
            text.trim() === ''
         ) {
             res.status(422).json({ message: 'Invalid details'});
+            client.close();
             return;
         }
+
         const newComment = {
-            id: newDate().toISOString(),
             email,
             name,
             text,
+            eventId,
         };
-        console.log(newComment);
 
-        res.status(201).json ({message: 'comment added', comment: newComment})
+
+        let result;
+
+        try {
+          result = await insertDocument(client, 'comments', newComment);
+          newComment._id = result.insertedId;
+          res.status(201).json ({message: 'comment added', comment: newComment})
+         } 
+         catch (error) {
+          res.status(500).json({messaage:'Inserting comment failed'})
+         }
+
    }
 
    if (req.method === 'GET') {
-     const dummyList = [
-        {
-         id: 'c1', 
-         name: 'zing', 
-         text: ' how the go dey go 1',
-        },
-
-        {
-         id: 'c1', 
-         name: 'li', 
-         text: ' how the go dey go my g',
-        },
-     ];
-
-     res.status(200).json({comments: dummyList})
+      try {
+        const documents = await getAllDocuments(
+        client, 
+        'comments',
+        { _id: -1 },
+       { eventId: eventId}
+        );
+       res.status(200).json({comments: documents});
+      } 
+      catch (error) {
+        res.status(500).json({ message: 'fetching  comment failed!'});
+      }
    }
-}
 
+   client.close();
+}
 
 export default handler;
